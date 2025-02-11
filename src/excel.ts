@@ -14,19 +14,62 @@ export class Excel {
     this.sheets = google.sheets({ version: "v4", auth });
   }
 
-  async write_report(period: string, data: any) {
-    const new_sheet = await this._create_new_sheet(period);
-    if (!new_sheet) throw "error";
+  async write_report(period: string, data: string[][]) {
+    try {
+      const new_sheet = await this._create_new_sheet(period);
+      if (!new_sheet) throw "error";
 
-    const writeResponse = await this.sheets.spreadsheets.values.update({
-      spreadsheetId: this.sheets_id,
-      range: `${period}!A1`, // диапазон ячеек
-      valueInputOption: "RAW",
-      requestBody: {
-        values: data, // Данные для записи
-      },
-    });
-    console.log("Write response:", writeResponse.data);
+      const writeResponse = await this.sheets.spreadsheets.values.update({
+        spreadsheetId: this.sheets_id,
+        range: `${period}!A1`, // диапазон ячеек
+        valueInputOption: "RAW",
+        requestBody: {
+          values: data, // Данные для записи
+        },
+      });
+
+      console.log(writeResponse.data);
+
+      const response = await this.sheets.spreadsheets.get({
+        spreadsheetId: this.sheets_id,
+        fields: "sheets(properties(sheetId,title))",
+      });
+
+      const sheet = response.data.sheets?.find(
+        (s) => s.properties?.title === period
+      )!.properties!.sheetId;
+
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: this.sheets_id,
+        requestBody: {
+          requests: [
+            {
+              autoResizeDimensions: {
+                dimensions: {
+                  sheetId: sheet, // ID листа (обычно 0 для первого листа)
+                  dimension: "COLUMNS",
+                  startIndex: 0, // Начальный индекс столбца
+                  endIndex: data[0].length, // Конечный индекс столбца
+                },
+              },
+            },
+            {
+              autoResizeDimensions: {
+                dimensions: {
+                  sheetId: sheet, // ID листа (обычно 0 для первого листа)
+                  dimension: "ROWS",
+                  startIndex: 0, // Начальный индекс столбца
+                  endIndex: data.length, // Конечный индекс столбца
+                },
+              },
+            },
+          ],
+        },
+      });
+      return [this.sheets_id, sheet];
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   async _create_new_sheet(name: string) {
