@@ -12,8 +12,8 @@ export class Message {
 export class Chat {
   id: number;
   messages: Message[] = [];
-  title: string;
-  constructor(id: number, title: string) {
+  title?: string;
+  constructor(id: number, title?: string) {
     this.id = id;
     this.title = title;
   }
@@ -22,4 +22,5 @@ export class Chat {
 export interface Period {
   startDate: Date;
   endDate: Date;
+  formatted: string;
 }

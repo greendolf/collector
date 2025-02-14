@@ -14,30 +14,18 @@ export class Excel {
     this.sheets = google.sheets({ version: "v4", auth });
   }
 
-  async write_report(period: string, data: string[][]) {
+  async write_data(sheet: string, data: string[][]) {
     try {
-      const new_sheet = await this._create_new_sheet(period);
-      if (!new_sheet) throw "error";
-
       const writeResponse = await this.sheets.spreadsheets.values.update({
         spreadsheetId: this.sheets_id,
-        range: `${period}!A1`, // диапазон ячеек
+        range: `${sheet}!A1`, // диапазон ячеек
         valueInputOption: "RAW",
         requestBody: {
           values: data, // Данные для записи
         },
       });
 
-      console.log(writeResponse.data);
-
-      const response = await this.sheets.spreadsheets.get({
-        spreadsheetId: this.sheets_id,
-        fields: "sheets(properties(sheetId,title))",
-      });
-
-      const sheet = response.data.sheets?.find(
-        (s) => s.properties?.title === period
-      )!.properties!.sheetId;
+      const sheetId = await this.get_sheet_id(sheet);
 
       await this.sheets.spreadsheets.batchUpdate({
         spreadsheetId: this.sheets_id,
@@ -46,20 +34,20 @@ export class Excel {
             {
               autoResizeDimensions: {
                 dimensions: {
-                  sheetId: sheet, // ID листа (обычно 0 для первого листа)
+                  sheetId,
                   dimension: "COLUMNS",
-                  startIndex: 0, // Начальный индекс столбца
-                  endIndex: data[0].length, // Конечный индекс столбца
+                  startIndex: 0,
+                  endIndex: data[0].length,
                 },
               },
             },
             {
               autoResizeDimensions: {
                 dimensions: {
-                  sheetId: sheet, // ID листа (обычно 0 для первого листа)
+                  sheetId,
                   dimension: "ROWS",
-                  startIndex: 0, // Начальный индекс столбца
-                  endIndex: data.length, // Конечный индекс столбца
+                  startIndex: 0,
+                  endIndex: data.length,
                 },
               },
             },
@@ -72,22 +60,45 @@ export class Excel {
     }
   }
 
-  async _create_new_sheet(name: string) {
-    const request = {
-      spreadsheetId: this.sheets_id,
-      resource: {
-        requests: [
-          {
-            addSheet: {
-              properties: {
-                title: name,
+  async create_new_sheet(name: string) {
+    try {
+      const request = {
+        spreadsheetId: this.sheets_id,
+        resource: {
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: name,
+                },
               },
             },
-          },
-        ],
-      },
-    };
+          ],
+        },
+      };
 
-    return this.sheets.spreadsheets.batchUpdate(request);
+      await this.sheets.spreadsheets.batchUpdate(request);
+
+      return this.get_sheet_id(name);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async get_sheet_id(name: string) {
+    const response = await this.sheets.spreadsheets.get({
+      spreadsheetId: this.sheets_id,
+      fields: "sheets(properties(sheetId,title))",
+    });
+
+    const sheetId = response.data.sheets?.find(
+      (s) => s.properties?.title === name
+    )!.properties!.sheetId;
+
+    return sheetId;
+  }
+
+  get_sheet_link(sheet_id: number) {
+    return `https://docs.google.com/spreadsheets/d/${this.sheets_id}/edit#gid=${sheet_id}`;
   }
 }
