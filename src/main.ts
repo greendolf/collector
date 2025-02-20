@@ -1,19 +1,16 @@
-import { config } from "dotenv";
-config();
 import moment from "moment-timezone";
 
 import { Excel } from "./excel";
-import { Chat, Period } from "./dtos";
+import { Chat, Period, Settings } from "./dtos";
 import { Collector } from "./bot";
+import importFresh from "import-fresh";
+import path from "path";
 
 class Server {
-  bot: Collector | null;
-  excel: Excel | null;
+  bot!: Collector;
+  excel!: Excel;
 
-  timezone: string | null;
-  report_day: string | null;
-  report_time: string[] | null;
-  hashtags: string[] | null;
+  settings!: Settings;
 
   matrix_headers: string[] = [
     "Хештег",
@@ -22,42 +19,36 @@ class Server {
   ];
 
   constructor() {
-    if (process.env.TARGET_ID && process.env.BOT_TOKEN) {
-      this.bot = new Collector(
-        process.env.BOT_TOKEN,
-        Number(process.env.TARGET_ID)
-      );
-    } else {
-      this.bot = null;
-    }
-
-    this.excel = process.env.GOOGLE_SHEET_ID
-      ? new Excel(process.env.GOOGLE_SHEET_ID)
-      : null;
-
-    this.timezone = process.env.TIMEZONE || null;
-
-    this.report_day = process.env.REPORT_DAY || null;
-    this.report_time = process.env.REPORT_TIME?.split(":") || null;
-
-    this.hashtags = process.env.HASHTAGS?.split(",") || null;
-    this.form_report();
-    // setInterval(async () => {
-    //   const now = moment.tz(process.env.TIMEZONE!);
-    //   console.log(now.format("HH:mm"));
-    //   if (
-    //     (now.format("HH:mm") === this.report_time &&
-    //       now.day() === Number(process.env.REPORT_DAY)) ||
-    //     true
-    //   ) {
-    //     console.log("form report");
-    //     this.form_report();
-    //   }
-    // }, 60000);
+    this.init();
   }
 
-  async launch() {
-    this.bot?.launch();
+  async init() {
+    await this.load_settings();
+
+    this.bot = new Collector();
+
+    this.excel = new Excel(this.settings.google_sheet_id);
+
+    setInterval(async () => {
+      const now = moment.tz(this.settings.timezone);
+      await this.load_settings();
+      console.log(
+        `${now.format("HH:mm")}, ${this.settings.report_time.join(":")}`
+      );
+      if (
+        now.format("HH:mm") === this.settings.report_time.join(":") &&
+        now.day() === this.settings.report_day
+      ) {
+        this.form_report();
+      }
+    }, 60000);
+  }
+
+  async load_settings() {
+    const file_path = path.join(__dirname, "../settings.json");
+    const settings = importFresh(file_path) as Settings;
+    this.settings = settings;
+    return settings;
   }
 
   stop(code: string) {
@@ -69,24 +60,25 @@ class Server {
   async form_report() {
     try {
       const period = this._get_period(
-        this.timezone!,
-        this.report_day!,
-        this.report_time!
+        this.settings.timezone!,
+        this.settings.report_day,
+        this.settings.report_time,
+        this.settings.period
       );
 
       const hashtags_not_found: Record<string, Chat[]> = {};
 
-      this.hashtags?.forEach((hashtag) => {
-        hashtags_not_found[hashtag] = [];
+      this.settings.hashtags.forEach((hashtag) => {
+        hashtags_not_found[hashtag.hashtag] = [];
         for (const [id, chat] of Object.entries(this.bot!.chats)) {
-          hashtags_not_found[hashtag].push(chat);
+          hashtags_not_found[hashtag.hashtag].push(chat);
           for (const message of chat.messages) {
             if (
               message.date >= period.startDate &&
               message.date <= period.endDate &&
-              message.text.includes(hashtag)
+              message.text.includes(hashtag.hashtag)
             ) {
-              hashtags_not_found[hashtag].pop();
+              hashtags_not_found[hashtag.hashtag].pop();
               break;
             }
           }
@@ -123,19 +115,17 @@ class Server {
 
   _get_period(
     timezone: string,
-    report_day: string,
-    report_time: string[]
+    report_day: number,
+    report_time: string[],
+    period: string[]
   ): Period {
     const hour = report_time[0];
     const minute = report_time[1];
     const now = moment.tz(timezone);
-    const endOfPeriod = now
-      .clone()
-      .day(report_day)
-      .hour(Number(hour))
-      .minute(Number(minute));
+    const endOfPeriod = now.clone();
     const startOfPeriod = endOfPeriod
-      .subtract(1, "week")
+      .clone()
+      .subtract(Number(period[0]), "week")
       .subtract(1, "hour")
       .subtract(1, "minute");
     return {

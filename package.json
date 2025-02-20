@@ -12,6 +12,7 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "googleapis": "^144.0.0",
+    "import-fresh": "^3.3.1",
     "moment-timezone": "^0.5.47",
     "telegraf": "^4.16.3"
   },

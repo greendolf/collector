@@ -6,9 +6,8 @@ export class Excel {
 
   constructor(sheet_id: string) {
     this.sheets_id = sheet_id;
-
     const auth = new google.auth.GoogleAuth({
-      keyFile: `${process.cwd()}/auth.json`,
+      keyFile: `${process.cwd()}\\auth.json`,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
     this.sheets = google.sheets({ version: "v4", auth });
